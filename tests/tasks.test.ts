@@ -73,6 +73,48 @@ describe('GET /tasks', () => {
     const res = await app.inject({ method: 'GET', url: '/tasks?status=nope' });
     expect(res.statusCode).toBe(400);
   });
+
+  it('filters by owner with an exact match', async () => {
+    await createTask({ title: 'A', owner: 'alice' });
+    await createTask({ title: 'B', owner: 'bob' });
+    await createTask({ title: 'C', owner: 'Alice' });
+    await createTask({ title: 'D', owner: 'alice2' });
+    await createTask({ title: 'E' });
+
+    const res = await app.inject({ method: 'GET', url: '/tasks?owner=alice' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<Task[]>().map((t) => t.title)).toEqual(['A']);
+  });
+
+  it('returns 200 and an empty list when no task has that owner', async () => {
+    await createTask({ title: 'A', owner: 'alice' });
+    const res = await app.inject({ method: 'GET', url: '/tasks?owner=nobody' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
+  });
+
+  it('combines owner and status filters', async () => {
+    const { task: a } = await createTask({ title: 'A', owner: 'alice' });
+    await createTask({ title: 'B', owner: 'alice' });
+    const { task: c } = await createTask({ title: 'C', owner: 'bob' });
+    await app.inject({ method: 'PATCH', url: `/tasks/${a.id}`, payload: { status: 'done' } });
+    await app.inject({ method: 'PATCH', url: `/tasks/${c.id}`, payload: { status: 'done' } });
+
+    const res = await app.inject({ method: 'GET', url: '/tasks?owner=alice&status=done' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<Task[]>().map((t) => t.title)).toEqual(['A']);
+
+    const none = await app.inject({ method: 'GET', url: '/tasks?owner=bob&status=todo' });
+    expect(none.statusCode).toBe(200);
+    expect(none.json()).toEqual([]);
+  });
+
+  it('rejects an empty owner filter', async () => {
+    await createTask({ title: 'A', owner: 'alice' });
+    const res = await app.inject({ method: 'GET', url: '/tasks?owner=' });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toHaveProperty('issues');
+  });
 });
 
 describe('GET /tasks/:id', () => {
