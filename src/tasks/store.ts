@@ -1,0 +1,68 @@
+import { randomUUID } from 'node:crypto';
+import type { CreateTaskInput, HistoryEntry, Task, UpdateTaskInput } from './schema.js';
+
+export interface TaskStore {
+  list(filter?: { status?: Task['status'] }): Task[];
+  get(id: string): Task | undefined;
+  create(input: CreateTaskInput): Task;
+  update(id: string, input: UpdateTaskInput): Task | undefined;
+  remove(id: string): boolean;
+}
+
+type Clock = () => Date;
+
+export function createMemoryStore(clock: Clock = () => new Date()): TaskStore {
+  const tasks = new Map<string, Task>();
+
+  return {
+    list(filter) {
+      const all = [...tasks.values()];
+      return filter?.status ? all.filter((t) => t.status === filter.status) : all;
+    },
+
+    get(id) {
+      return tasks.get(id);
+    },
+
+    create(input) {
+      const now = clock().toISOString();
+      const task: Task = {
+        id: randomUUID(),
+        title: input.title,
+        description: input.description,
+        owner: input.owner ?? null,
+        status: 'todo',
+        createdAt: now,
+        updatedAt: now,
+        history: [],
+      };
+      tasks.set(task.id, task);
+      return task;
+    },
+
+    update(id, input) {
+      const current = tasks.get(id);
+      if (!current) return undefined;
+      const now = clock().toISOString();
+      const history: HistoryEntry[] = [];
+      const next: Task = { ...current };
+
+      for (const field of ['title', 'description', 'owner', 'status'] as const) {
+        const value = input[field];
+        if (value === undefined || value === current[field]) continue;
+        history.push({ at: now, field, from: current[field], to: value });
+        Object.assign(next, { [field]: value });
+      }
+
+      if (history.length === 0) return current;
+      next.updatedAt = now;
+      next.history = [...current.history, ...history];
+      tasks.set(id, next);
+      return next;
+    },
+
+    remove(id) {
+      return tasks.delete(id);
+    },
+  };
+}
