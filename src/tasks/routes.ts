@@ -6,7 +6,7 @@ import type { TaskStore } from './store.js';
 const IdParams = z.object({ id: z.string().uuid() });
 const ListQuery = z.object({
   status: TaskStatus.optional(),
-  owner: z.string().min(1).max(100).optional(),
+  owner: z.string().trim().min(1).max(100).optional(),
   limit: z
     .string()
     .regex(/^\d+$/, 'must be an integer')

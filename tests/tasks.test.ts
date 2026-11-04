@@ -116,6 +116,44 @@ describe('GET /tasks', () => {
     expect(res.json()).toHaveProperty('issues');
   });
 
+  it('trims surrounding whitespace in the owner filter', async () => {
+    await createTask({ title: 'A', owner: ' alice ' });
+    await createTask({ title: 'B', owner: 'bob' });
+    const res = await app.inject({ method: 'GET', url: '/tasks?owner=%20alice%20' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<Task[]>().map((t) => t.title)).toEqual(['A']);
+  });
+
+  it('rejects a whitespace-only owner filter', async () => {
+    const res = await app.inject({ method: 'GET', url: '/tasks?owner=%20%20%20' });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toHaveProperty('issues');
+  });
+
+  it('rejects an owner filter longer than 100 chars after trimming', async () => {
+    const tooLong = await app.inject({ method: 'GET', url: `/tasks?owner=${'a'.repeat(101)}` });
+    expect(tooLong.statusCode).toBe(400);
+    const paddedTooLong = await app.inject({
+      method: 'GET',
+      url: `/tasks?owner=%20${'a'.repeat(101)}%20`,
+    });
+    expect(paddedTooLong.statusCode).toBe(400);
+    const paddedOk = await app.inject({
+      method: 'GET',
+      url: `/tasks?owner=%20${'a'.repeat(100)}%20`,
+    });
+    expect(paddedOk.statusCode).toBe(200);
+  });
+
+  it('keeps inner whitespace in the owner filter', async () => {
+    await createTask({ title: 'A', owner: 'a b' });
+    await createTask({ title: 'B', owner: 'ab' });
+    await createTask({ title: 'C', owner: 'a  b' });
+    const res = await app.inject({ method: 'GET', url: '/tasks?owner=a%20b' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<Task[]>().map((t) => t.title)).toEqual(['A']);
+  });
+
   describe('pagination', () => {
     async function seed(n: number) {
       for (let i = 1; i <= n; i++) await createTask({ title: `T${i}` });
