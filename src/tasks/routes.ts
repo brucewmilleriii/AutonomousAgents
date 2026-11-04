@@ -4,7 +4,10 @@ import { CreateTaskInput, TaskStatus, UpdateTaskInput } from './schema.js';
 import type { TaskStore } from './store.js';
 
 const IdParams = z.object({ id: z.string().uuid() });
-const ListQuery = z.object({ status: TaskStatus.optional() });
+const ListQuery = z.object({
+  status: TaskStatus.optional(),
+  owner: z.string().min(1).max(100).optional(),
+});
 
 function badRequest(error: z.ZodError) {
   return {
@@ -17,7 +20,7 @@ export function registerTaskRoutes(app: FastifyInstance, store: TaskStore): void
   app.get('/tasks', async (req, reply) => {
     const query = ListQuery.safeParse(req.query);
     if (!query.success) return reply.code(400).send(badRequest(query.error));
-    return store.list(query.data.status ? { status: query.data.status } : undefined);
+    return store.list(query.data);
   });
 
   app.get('/tasks/:id', async (req, reply) => {
