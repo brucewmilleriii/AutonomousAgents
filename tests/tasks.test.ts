@@ -115,6 +115,98 @@ describe('GET /tasks', () => {
     expect(res.statusCode).toBe(400);
     expect(res.json()).toHaveProperty('issues');
   });
+
+  describe('pagination', () => {
+    async function seed(n: number) {
+      for (let i = 1; i <= n; i++) await createTask({ title: `T${i}` });
+    }
+    const titles = (res: { json<T>(): T }) => res.json<Task[]>().map((t) => t.title);
+
+    it('defaults to limit 100 and offset 0 and sets X-Total-Count', async () => {
+      await seed(3);
+      const res = await app.inject({ method: 'GET', url: '/tasks' });
+      expect(res.statusCode).toBe(200);
+      expect(titles(res)).toEqual(['T1', 'T2', 'T3']);
+      expect(res.headers['x-total-count']).toBe('3');
+    });
+
+    it('returns the 2nd and 3rd tasks for limit=2&offset=1', async () => {
+      await seed(5);
+      const res = await app.inject({ method: 'GET', url: '/tasks?limit=2&offset=1' });
+      expect(res.statusCode).toBe(200);
+      expect(titles(res)).toEqual(['T2', 'T3']);
+      expect(res.headers['x-total-count']).toBe('5');
+    });
+
+    it('caps results at limit=100 by default', async () => {
+      await seed(101);
+      const res = await app.inject({ method: 'GET', url: '/tasks' });
+      expect(res.json<Task[]>()).toHaveLength(100);
+      expect(res.headers['x-total-count']).toBe('101');
+    });
+
+    it('accepts the boundary values limit=1 and limit=100', async () => {
+      await seed(3);
+      const one = await app.inject({ method: 'GET', url: '/tasks?limit=1' });
+      expect(titles(one)).toEqual(['T1']);
+      const hundred = await app.inject({ method: 'GET', url: '/tasks?limit=100' });
+      expect(hundred.statusCode).toBe(200);
+    });
+
+    it('returns 200 and [] when offset is past the end', async () => {
+      await seed(3);
+      const res = await app.inject({ method: 'GET', url: '/tasks?offset=3' });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual([]);
+      expect(res.headers['x-total-count']).toBe('3');
+    });
+
+    it.each([
+      'limit=0',
+      'limit=101',
+      'limit=abc',
+      'limit=1.5',
+      'limit=',
+      'limit=-1',
+      'offset=-1',
+      'offset=abc',
+      'offset=1.5',
+      'offset=',
+      'offset=99999999999999999999',
+    ])('rejects ?%s with 400 and issues', async (qs) => {
+      await seed(2);
+      const res = await app.inject({ method: 'GET', url: `/tasks?${qs}` });
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toHaveProperty('issues');
+    });
+
+    it('pages after status and owner filters and counts the filtered total', async () => {
+      for (let i = 1; i <= 4; i++) {
+        const { task } = await createTask({ title: `A${i}`, owner: 'alice' });
+        if (i !== 2) {
+          await app.inject({
+            method: 'PATCH',
+            url: `/tasks/${task.id}`,
+            payload: { status: 'done' },
+          });
+        }
+      }
+      await createTask({ title: 'B1', owner: 'bob' });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/tasks?owner=alice&status=done&limit=2&offset=1',
+      });
+      expect(res.statusCode).toBe(200);
+      expect(titles(res)).toEqual(['A3', 'A4']);
+      expect(res.headers['x-total-count']).toBe('3');
+    });
+
+    it('does not set X-Total-Count on a 400', async () => {
+      const res = await app.inject({ method: 'GET', url: '/tasks?limit=0' });
+      expect(res.headers['x-total-count']).toBeUndefined();
+    });
+  });
 });
 
 describe('GET /tasks/:id', () => {
