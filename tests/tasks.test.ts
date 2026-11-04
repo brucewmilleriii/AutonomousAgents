@@ -216,3 +216,86 @@ describe('DELETE /tasks/:id', () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+describe('dueDate', () => {
+  const invalidDates: unknown[] = [
+    '2026-13-01',
+    '2026-02-30',
+    '2026-02-29',
+    'tomorrow',
+    '2026-01-01T00:00:00Z',
+    20260101,
+  ];
+
+  it('defaults to null on create and accepts a date', async () => {
+    const { res, task } = await createTask();
+    expect(res.statusCode).toBe(201);
+    expect(task.dueDate).toBeNull();
+
+    const { task: dated } = await createTask({ title: 'Due', dueDate: '2026-03-15' });
+    expect(dated.dueDate).toBe('2026-03-15');
+    expect(dated.history).toEqual([]);
+  });
+
+  it('accepts a leap day only in a leap year', async () => {
+    const ok = await createTask({ title: 'Leap', dueDate: '2028-02-29' });
+    expect(ok.res.statusCode).toBe(201);
+    expect(ok.task.dueDate).toBe('2028-02-29');
+    const bad = await createTask({ title: 'Not leap', dueDate: '2026-02-29' });
+    expect(bad.res.statusCode).toBe(400);
+  });
+
+  it.each(invalidDates)('rejects invalid dueDate %j on create', async (dueDate) => {
+    const { res } = await createTask({ title: 'T', dueDate });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().issues.length).toBeGreaterThan(0);
+  });
+
+  it.each(invalidDates)('rejects invalid dueDate %j on update', async (dueDate) => {
+    const { task } = await createTask();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/tasks/${task.id}`,
+      payload: { dueDate },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().issues.length).toBeGreaterThan(0);
+  });
+
+  it('sets, changes and clears dueDate with history', async () => {
+    const { task } = await createTask();
+    const patch = (dueDate: string | null) =>
+      app.inject({ method: 'PATCH', url: `/tasks/${task.id}`, payload: { dueDate } });
+
+    const set = (await patch('2026-03-15')).json<Task>();
+    expect(set.dueDate).toBe('2026-03-15');
+    const changed = (await patch('2026-04-01')).json<Task>();
+    expect(changed.dueDate).toBe('2026-04-01');
+    const cleared = (await patch(null)).json<Task>();
+    expect(cleared.dueDate).toBeNull();
+
+    expect(cleared.history.map((h) => [h.field, h.from, h.to])).toEqual([
+      ['dueDate', null, '2026-03-15'],
+      ['dueDate', '2026-03-15', '2026-04-01'],
+      ['dueDate', '2026-04-01', null],
+    ]);
+  });
+
+  it('is a no-op when the same dueDate is set again', async () => {
+    const { task } = await createTask({ title: 'T', dueDate: '2026-03-15' });
+    const same = await app.inject({
+      method: 'PATCH',
+      url: `/tasks/${task.id}`,
+      payload: { dueDate: '2026-03-15' },
+    });
+    expect(same.json<Task>()).toEqual(task);
+
+    const { task: undated } = await createTask();
+    const nullAgain = await app.inject({
+      method: 'PATCH',
+      url: `/tasks/${undated.id}`,
+      payload: { dueDate: null },
+    });
+    expect(nullAgain.json<Task>()).toEqual(undated);
+  });
+});
