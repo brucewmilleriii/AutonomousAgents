@@ -36,6 +36,7 @@ export function createMemoryStore(clock: Clock = () => new Date()): TaskStore {
         description: input.description,
         owner: input.owner ?? null,
         status: 'todo',
+        dueDate: input.dueDate ?? null,
         createdAt: now,
         updatedAt: now,
         history: [],
@@ -51,7 +52,7 @@ export function createMemoryStore(clock: Clock = () => new Date()): TaskStore {
       const history: HistoryEntry[] = [];
       const next: Task = { ...current };
 
-      for (const field of ['title', 'description', 'owner', 'status'] as const) {
+      for (const field of ['title', 'description', 'owner', 'status', 'dueDate'] as const) {
         const value = input[field];
         if (value === undefined || value === current[field]) continue;
         history.push({ at: now, field, from: current[field], to: value });
