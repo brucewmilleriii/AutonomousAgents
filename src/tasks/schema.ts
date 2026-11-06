@@ -3,10 +3,13 @@ import { z } from 'zod';
 export const TaskStatus = z.enum(['todo', 'in_progress', 'in_review', 'done', 'blocked']);
 export type TaskStatus = z.infer<typeof TaskStatus>;
 
+const DueDate = z.iso.date();
+
 export const CreateTaskInput = z.strictObject({
   title: z.string().trim().min(1).max(200),
   description: z.string().max(5000).default(''),
   owner: z.string().trim().min(1).max(100).optional(),
+  dueDate: DueDate.optional(),
 });
 export type CreateTaskInput = z.infer<typeof CreateTaskInput>;
 
@@ -16,6 +19,7 @@ export const UpdateTaskInput = z
     description: z.string().max(5000).optional(),
     owner: z.string().trim().min(1).max(100).nullable().optional(),
     status: TaskStatus.optional(),
+    dueDate: DueDate.nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'At least one field is required' });
 export type UpdateTaskInput = z.infer<typeof UpdateTaskInput>;
@@ -33,6 +37,7 @@ export interface Task {
   description: string;
   owner: string | null;
   status: TaskStatus;
+  dueDate: string | null;
   createdAt: string;
   updatedAt: string;
   history: HistoryEntry[];
