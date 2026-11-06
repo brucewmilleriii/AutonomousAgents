@@ -5,7 +5,7 @@ export type TaskStatus = z.infer<typeof TaskStatus>;
 
 const DueDate = z.iso.date();
 
-export const CreateTaskInput = z.object({
+export const CreateTaskInput = z.strictObject({
   title: z.string().trim().min(1).max(200),
   description: z.string().max(5000).default(''),
   owner: z.string().trim().min(1).max(100).optional(),
@@ -14,7 +14,7 @@ export const CreateTaskInput = z.object({
 export type CreateTaskInput = z.infer<typeof CreateTaskInput>;
 
 export const UpdateTaskInput = z
-  .object({
+  .strictObject({
     title: z.string().trim().min(1).max(200).optional(),
     description: z.string().max(5000).optional(),
     owner: z.string().trim().min(1).max(100).nullable().optional(),

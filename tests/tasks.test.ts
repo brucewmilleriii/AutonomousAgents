@@ -54,6 +54,22 @@ describe('POST /tasks', () => {
     expect(res.statusCode).toBe(400);
     expect(res.json()).toHaveProperty('issues');
   });
+
+  it('rejects unknown body fields and names the key', async () => {
+    const { res } = await createTask({ title: 'x', colour: 'red' });
+    expect(res.statusCode).toBe(400);
+    const body = res.json<{ issues: { message: string }[] }>();
+    expect(JSON.stringify(body.issues)).toContain('colour');
+  });
+
+  it.each(['id', 'createdAt', 'updatedAt', 'history'])(
+    'rejects server-managed field %s in the body',
+    async (key) => {
+      const { res } = await createTask({ title: 'x', [key]: key === 'history' ? [] : 'v' });
+      expect(res.statusCode).toBe(400);
+      expect(JSON.stringify(res.json<{ issues: unknown }>().issues)).toContain(key);
+    },
+  );
 });
 
 describe('GET /tasks', () => {
@@ -319,6 +335,35 @@ describe('PATCH /tasks/:id', () => {
     });
     expect(res.statusCode).toBe(400);
   });
+
+  it('rejects unknown body fields and leaves the task unchanged', async () => {
+    const { task } = await createTask();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/tasks/${task.id}`,
+      payload: { stauts: 'done' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.stringify(res.json<{ issues: unknown }>().issues)).toContain('stauts');
+    const after = await app.inject({ method: 'GET', url: `/tasks/${task.id}` });
+    expect(after.json<Task>()).toEqual(task);
+  });
+
+  it.each(['id', 'createdAt', 'updatedAt', 'history'])(
+    'rejects server-managed field %s alongside a valid field',
+    async (key) => {
+      const { task } = await createTask();
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/tasks/${task.id}`,
+        payload: { title: 'new', [key]: key === 'history' ? [] : 'v' },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(JSON.stringify(res.json<{ issues: unknown }>().issues)).toContain(key);
+      const after = await app.inject({ method: 'GET', url: `/tasks/${task.id}` });
+      expect(after.json<Task>()).toEqual(task);
+    },
+  );
 
   it('returns 400 for a malformed id and 404 for an unknown id', async () => {
     const bad = await app.inject({ method: 'PATCH', url: '/tasks/x', payload: { title: 'y' } });
