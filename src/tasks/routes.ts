@@ -7,6 +7,18 @@ const IdParams = z.object({ id: z.string().uuid() });
 const ListQuery = z.object({
   status: TaskStatus.optional(),
   owner: z.string().trim().min(1).max(100).optional(),
+  limit: z
+    .string()
+    .regex(/^\d+$/, 'must be an integer')
+    .transform(Number)
+    .pipe(z.number().int().min(1).max(100))
+    .default(100),
+  offset: z
+    .string()
+    .regex(/^\d+$/, 'must be an integer')
+    .transform(Number)
+    .pipe(z.number().int().min(0).max(Number.MAX_SAFE_INTEGER))
+    .default(0),
 });
 
 function badRequest(error: z.ZodError) {
@@ -20,7 +32,11 @@ export function registerTaskRoutes(app: FastifyInstance, store: TaskStore): void
   app.get('/tasks', async (req, reply) => {
     const query = ListQuery.safeParse(req.query);
     if (!query.success) return reply.code(400).send(badRequest(query.error));
-    return store.list(query.data);
+    const { limit, offset, ...filter } = query.data;
+    const matching = store.list(filter);
+    return reply
+      .header('X-Total-Count', String(matching.length))
+      .send(matching.slice(offset, offset + limit));
   });
 
   app.get('/tasks/:id', async (req, reply) => {
