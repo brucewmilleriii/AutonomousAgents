@@ -7,6 +7,12 @@ const IdParams = z.object({ id: z.string().uuid() });
 const ListQuery = z.object({
   status: TaskStatus.optional(),
   owner: z.string().trim().min(1).max(100).optional(),
+  dueBefore: z.iso.date().optional(),
+  dueAfter: z.iso.date().optional(),
+  overdue: z
+    .literal('true')
+    .transform(() => true)
+    .optional(),
   limit: z
     .string()
     .regex(/^\d+$/, 'must be an integer')

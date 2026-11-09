@@ -2,7 +2,13 @@ import { randomUUID } from 'node:crypto';
 import type { CreateTaskInput, HistoryEntry, Task, UpdateTaskInput } from './schema.js';
 
 export interface TaskStore {
-  list(filter?: { status?: Task['status'] | undefined; owner?: string | undefined }): Task[];
+  list(filter?: {
+    status?: Task['status'] | undefined;
+    owner?: string | undefined;
+    dueBefore?: string | undefined;
+    dueAfter?: string | undefined;
+    overdue?: boolean | undefined;
+  }): Task[];
   get(id: string): Task | undefined;
   create(input: CreateTaskInput): Task;
   update(id: string, input: UpdateTaskInput): Task | undefined;
@@ -17,10 +23,15 @@ export function createMemoryStore(clock: Clock = () => new Date()): TaskStore {
   return {
     list(filter) {
       const all = [...tasks.values()];
+      const today = clock().toISOString().slice(0, 10);
       return all.filter(
         (t) =>
           (filter?.status === undefined || t.status === filter.status) &&
-          (filter?.owner === undefined || t.owner === filter.owner),
+          (filter?.owner === undefined || t.owner === filter.owner) &&
+          (filter?.dueBefore === undefined ||
+            (t.dueDate !== null && t.dueDate < filter.dueBefore)) &&
+          (filter?.dueAfter === undefined || (t.dueDate !== null && t.dueDate > filter.dueAfter)) &&
+          (!filter?.overdue || (t.dueDate !== null && t.dueDate < today && t.status !== 'done')),
       );
     },
 
