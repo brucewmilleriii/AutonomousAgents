@@ -263,6 +263,64 @@ describe('GET /tasks', () => {
   });
 });
 
+describe('GET /tasks?q=', () => {
+  const search = (q: string, extra = '') =>
+    app.inject({ method: 'GET', url: `/tasks?q=${encodeURIComponent(q)}${extra}` });
+  const names = (res: { json: () => unknown }) => (res.json() as Task[]).map((t) => t.title);
+
+  it('matches title or description case-insensitively', async () => {
+    await createTask({ title: 'Fix Login bug' });
+    await createTask({ title: 'Docs', description: 'explain LOGIN flow' });
+    await createTask({ title: 'Unrelated' });
+    const res = await search('login');
+    expect(res.statusCode).toBe(200);
+    expect(names(res)).toEqual(['Fix Login bug', 'Docs']);
+    expect(res.headers['x-total-count']).toBe('2');
+  });
+
+  it('trims q before matching', async () => {
+    await createTask({ title: 'Alpha' });
+    expect(names(await search('  alp  '))).toEqual(['Alpha']);
+  });
+
+  it('rejects empty, whitespace-only and over-long q', async () => {
+    expect((await search('')).statusCode).toBe(400);
+    expect((await search('   ')).statusCode).toBe(400);
+    expect((await search('a'.repeat(201))).statusCode).toBe(400);
+    expect((await search('a'.repeat(200))).statusCode).toBe(200);
+    expect((await search(`  ${'a'.repeat(201)}  `)).statusCode).toBe(400);
+  });
+
+  it('treats q as plain text, not a regex', async () => {
+    await createTask({ title: 'anything' });
+    await createTask({ title: 'literal .* here' });
+    expect(names(await search('.*'))).toEqual(['literal .* here']);
+    expect((await search('(')).statusCode).toBe(200);
+  });
+
+  it('combines with status, owner and pagination', async () => {
+    for (const [title, owner] of [
+      ['bug 1', 'alice'],
+      ['bug 2', 'alice'],
+      ['bug 3', 'alice'],
+      ['bug 4', 'bob'],
+      ['other', 'alice'],
+    ] as const) {
+      const { task } = await createTask({ title, owner });
+      if (title !== 'bug 3') {
+        await app.inject({
+          method: 'PATCH',
+          url: `/tasks/${task.id}`,
+          payload: { status: 'done' },
+        });
+      }
+    }
+    const res = await search('BUG', '&owner=alice&status=done&limit=1&offset=1');
+    expect(names(res)).toEqual(['bug 2']);
+    expect(res.headers['x-total-count']).toBe('2');
+  });
+});
+
 describe('GET /tasks/:id', () => {
   it('returns a task', async () => {
     const { task } = await createTask();

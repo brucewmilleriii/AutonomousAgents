@@ -2,7 +2,11 @@ import { randomUUID } from 'node:crypto';
 import type { CreateTaskInput, HistoryEntry, Task, UpdateTaskInput } from './schema.js';
 
 export interface TaskStore {
-  list(filter?: { status?: Task['status'] | undefined; owner?: string | undefined }): Task[];
+  list(filter?: {
+    status?: Task['status'] | undefined;
+    owner?: string | undefined;
+    q?: string | undefined;
+  }): Task[];
   get(id: string): Task | undefined;
   create(input: CreateTaskInput): Task;
   update(id: string, input: UpdateTaskInput): Task | undefined;
@@ -17,10 +21,14 @@ export function createMemoryStore(clock: Clock = () => new Date()): TaskStore {
   return {
     list(filter) {
       const all = [...tasks.values()];
+      const needle = filter?.q?.toLowerCase();
       return all.filter(
         (t) =>
           (filter?.status === undefined || t.status === filter.status) &&
-          (filter?.owner === undefined || t.owner === filter.owner),
+          (filter?.owner === undefined || t.owner === filter.owner) &&
+          (needle === undefined ||
+            t.title.toLowerCase().includes(needle) ||
+            t.description.toLowerCase().includes(needle)),
       );
     },
 
