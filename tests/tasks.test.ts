@@ -531,4 +531,35 @@ describe('GET /tasks sorting', () => {
     const unsorted = await app.inject({ method: 'GET', url: '/tasks?owner=x' });
     expect(unsorted.headers['x-total-count']).toBe('3');
   });
+
+  it('combines status filter with sort', async () => {
+    const ids: Record<string, string> = {};
+    for (const [title, dueDate] of [
+      ['A', '2026-03-02'],
+      ['B', undefined],
+      ['C', '2026-03-01'],
+      ['D', '2026-03-05'],
+    ] as const) {
+      const { task } = await createTask(dueDate ? { title, dueDate } : { title });
+      ids[title] = task.id;
+    }
+    for (const t of ['A', 'B', 'C']) {
+      await app.inject({ method: 'PATCH', url: `/tasks/${ids[t]}`, payload: { status: 'done' } });
+    }
+    const res = await app.inject({
+      method: 'GET',
+      url: '/tasks?status=done&sort=dueDate&order=desc',
+    });
+    expect(res.headers['x-total-count']).toBe('3');
+    expect(res.json<Task[]>().map((t) => t.title)).toEqual(['A', 'C', 'B']);
+  });
+
+  it('keeps insertion order for equal createdAt in both directions', async () => {
+    await app.close();
+    const fixed = () => new Date(Date.UTC(2026, 0, 1));
+    app = buildApp({ store: createMemoryStore(fixed) });
+    for (const title of ['A', 'B', 'C']) await createTask({ title });
+    expect((await titles('?sort=createdAt&order=asc')).titles).toEqual(['A', 'B', 'C']);
+    expect((await titles('?sort=createdAt&order=desc')).titles).toEqual(['A', 'B', 'C']);
+  });
 });
