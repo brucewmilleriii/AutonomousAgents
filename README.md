@@ -26,14 +26,16 @@ pnpm dev         # http://127.0.0.1:3000/health
 
 ## API
 
-| Method | Path           | Notes                                                                   |
-| ------ | -------------- | ----------------------------------------------------------------------- |
-| GET    | /health        | `{status:"ok"}`                                                         |
-| GET    | /tasks?status= | List, optional status filter                                            |
-| POST   | /tasks         | `{title, description?, owner?}` → 201                                   |
-| GET    | /tasks/:id     | 404 if missing                                                          |
-| PATCH  | /tasks/:id     | Any of title, description, owner (null clears), status; records history |
-| DELETE | /tasks/:id     | 204, then 404                                                           |
+| Method | Path       | Notes                                                                   |
+| ------ | ---------- | ----------------------------------------------------------------------- |
+| GET    | /health    | `{status:"ok"}`                                                         |
+| GET    | /tasks     | List; filters `status`, `owner`; `sort`, `order`, `limit`, `offset`     |
+| POST   | /tasks     | `{title, description?, owner?}` → 201                                   |
+| GET    | /tasks/:id | 404 if missing                                                          |
+| PATCH  | /tasks/:id | Any of title, description, owner (null clears), status; records history |
+| DELETE | /tasks/:id | 204, then 404                                                           |
+
+`GET /tasks` sorts by `sort` = `createdAt` (default), `updatedAt` or `dueDate`, and `order` = `asc` (default) or `desc`. Sorting is applied before `limit`/`offset`; ties keep insertion order; with `sort=dueDate`, tasks without a dueDate come last in both directions. Other values return 400.
 
 Status values: `todo`, `in_progress`, `in_review`, `done`, `blocked`.
 
