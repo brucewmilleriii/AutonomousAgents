@@ -500,13 +500,19 @@ describe('GET /tasks due date filters', () => {
   });
 
   it('overdue=true returns past-due, non-done tasks; due today is not overdue', async () => {
-    const { early, late } = await seed();
+    const { early } = await seed();
     const overdueTitles = async () =>
       titles(await app.inject({ method: 'GET', url: '/tasks?overdue=true' }));
     expect(await overdueTitles()).toEqual(['early']);
     await app.inject({ method: 'PATCH', url: `/tasks/${early.id}`, payload: { status: 'done' } });
     expect(await overdueTitles()).toEqual([]);
-    expect(late.dueDate).toBe('2026-02-01');
+    // Only `done` clears overdue; other statuses stay overdue.
+    await app.inject({
+      method: 'PATCH',
+      url: `/tasks/${early.id}`,
+      payload: { status: 'blocked' },
+    });
+    expect(await overdueTitles()).toEqual(['early']);
   });
 
   it.each(['false', '1', 'TRUE', ''])('rejects overdue=%j', async (v) => {
@@ -553,5 +559,26 @@ describe('GET /tasks due date filters', () => {
       url: '/tasks?overdue=true&dueBefore=2025-12-31',
     });
     expect(titles(combo)).toEqual([]);
+  });
+});
+
+describe('overdue uses the UTC date of the injected clock', () => {
+  it('treats 23:59:59Z on 2026-01-01 as today', async () => {
+    const own = buildApp({
+      store: createMemoryStore(() => new Date('2026-01-01T23:59:59Z')),
+    });
+    await own.inject({
+      method: 'POST',
+      url: '/tasks',
+      payload: { title: 'today', dueDate: '2026-01-01' },
+    });
+    await own.inject({
+      method: 'POST',
+      url: '/tasks',
+      payload: { title: 'past', dueDate: '2025-12-31' },
+    });
+    const res = await own.inject({ method: 'GET', url: '/tasks?overdue=true' });
+    expect(res.json<Task[]>().map((t) => t.title)).toEqual(['past']);
+    await own.close();
   });
 });

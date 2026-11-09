@@ -23,7 +23,7 @@ export function createMemoryStore(clock: Clock = () => new Date()): TaskStore {
   return {
     list(filter) {
       const all = [...tasks.values()];
-      const today = clock().toISOString().slice(0, 10);
+      const today = filter?.overdue ? clock().toISOString().slice(0, 10) : undefined;
       return all.filter(
         (t) =>
           (filter?.status === undefined || t.status === filter.status) &&
@@ -31,7 +31,7 @@ export function createMemoryStore(clock: Clock = () => new Date()): TaskStore {
           (filter?.dueBefore === undefined ||
             (t.dueDate !== null && t.dueDate < filter.dueBefore)) &&
           (filter?.dueAfter === undefined || (t.dueDate !== null && t.dueDate > filter.dueAfter)) &&
-          (!filter?.overdue || (t.dueDate !== null && t.dueDate < today && t.status !== 'done')),
+          (today === undefined || (t.dueDate !== null && t.dueDate < today && t.status !== 'done')),
       );
     },
 
