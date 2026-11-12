@@ -30,6 +30,7 @@ pnpm dev         # http://127.0.0.1:3000/health
 | ------ | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | GET    | /health    | `{status:"ok"}`                                                                                                                                            |
 | GET    | /tasks     | List, optional filters: `status`, `owner`, `dueBefore`, `dueAfter` (YYYY-MM-DD, strict, undated excluded), `overdue=true` (due before today UTC, not done) |
+| GET    | /tasks?q=  | Case-insensitive plain-text search of title and description (max 200)                                                                                      |
 | POST   | /tasks     | `{title, description?, owner?}` → 201                                                                                                                      |
 | GET    | /tasks/:id | 404 if missing                                                                                                                                             |
 | PATCH  | /tasks/:id | Any of title, description, owner (null clears), status; records history                                                                                    |

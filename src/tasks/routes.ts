@@ -13,6 +13,7 @@ const ListQuery = z.object({
     .literal('true')
     .transform(() => true)
     .optional(),
+  q: z.string().trim().min(1).max(200).optional(),
   limit: z
     .string()
     .regex(/^\d+$/, 'must be an integer')
