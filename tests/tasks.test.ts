@@ -532,3 +532,92 @@ describe('dueDate', () => {
     expect(nullAgain.json<Task>()).toEqual(undated);
   });
 });
+
+describe('GET /tasks sorting', () => {
+  const titles = async (qs = '') => {
+    const res = await app.inject({ method: 'GET', url: `/tasks${qs}` });
+    return { res, titles: res.json<Task[]>().map((t) => t.title) };
+  };
+
+  async function seed() {
+    await createTask({ title: 'A', dueDate: '2026-03-02', owner: 'x' });
+    await createTask({ title: 'B', owner: 'x' });
+    await createTask({ title: 'C', dueDate: '2026-03-01' });
+    await createTask({ title: 'D', dueDate: '2026-03-02', owner: 'x' });
+    await createTask({ title: 'E' });
+  }
+
+  it('defaults to createdAt asc and supports desc', async () => {
+    await seed();
+    expect((await titles()).titles).toEqual(['A', 'B', 'C', 'D', 'E']);
+    expect((await titles('?sort=createdAt&order=asc')).titles).toEqual(['A', 'B', 'C', 'D', 'E']);
+    expect((await titles('?order=desc')).titles).toEqual(['E', 'D', 'C', 'B', 'A']);
+  });
+
+  it('sorts by updatedAt', async () => {
+    const { task: a } = await createTask({ title: 'A' });
+    await createTask({ title: 'B' });
+    await app.inject({ method: 'PATCH', url: `/tasks/${a.id}`, payload: { status: 'done' } });
+    expect((await titles('?sort=updatedAt')).titles).toEqual(['B', 'A']);
+    expect((await titles('?sort=updatedAt&order=desc')).titles).toEqual(['A', 'B']);
+  });
+
+  it('sorts by dueDate with undated last and stable ties in both directions', async () => {
+    await seed();
+    expect((await titles('?sort=dueDate')).titles).toEqual(['C', 'A', 'D', 'B', 'E']);
+    expect((await titles('?sort=dueDate&order=desc')).titles).toEqual(['A', 'D', 'C', 'B', 'E']);
+  });
+
+  it.each(['?sort=title', '?sort=', '?order=up', '?order=ASC'])(
+    'rejects %s with 400',
+    async (qs) => {
+      const res = await app.inject({ method: 'GET', url: `/tasks${qs}` });
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ error: 'Bad Request' });
+      expect(res.json<{ issues: unknown[] }>().issues.length).toBeGreaterThan(0);
+    },
+  );
+
+  it('sorts before pagination, keeps X-Total-Count, and combines with filters', async () => {
+    await seed();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/tasks?owner=x&sort=dueDate&order=desc&limit=1&offset=1',
+    });
+    expect(res.headers['x-total-count']).toBe('3');
+    expect(res.json<Task[]>().map((t) => t.title)).toEqual(['D']);
+    const unsorted = await app.inject({ method: 'GET', url: '/tasks?owner=x' });
+    expect(unsorted.headers['x-total-count']).toBe('3');
+  });
+
+  it('combines status filter with sort', async () => {
+    const ids: Record<string, string> = {};
+    for (const [title, dueDate] of [
+      ['A', '2026-03-02'],
+      ['B', undefined],
+      ['C', '2026-03-01'],
+      ['D', '2026-03-05'],
+    ] as const) {
+      const { task } = await createTask(dueDate ? { title, dueDate } : { title });
+      ids[title] = task.id;
+    }
+    for (const t of ['A', 'B', 'C']) {
+      await app.inject({ method: 'PATCH', url: `/tasks/${ids[t]}`, payload: { status: 'done' } });
+    }
+    const res = await app.inject({
+      method: 'GET',
+      url: '/tasks?status=done&sort=dueDate&order=desc',
+    });
+    expect(res.headers['x-total-count']).toBe('3');
+    expect(res.json<Task[]>().map((t) => t.title)).toEqual(['A', 'C', 'B']);
+  });
+
+  it('keeps insertion order for equal createdAt in both directions', async () => {
+    await app.close();
+    const fixed = () => new Date(Date.UTC(2026, 0, 1));
+    app = buildApp({ store: createMemoryStore(fixed) });
+    for (const title of ['A', 'B', 'C']) await createTask({ title });
+    expect((await titles('?sort=createdAt&order=asc')).titles).toEqual(['A', 'B', 'C']);
+    expect((await titles('?sort=createdAt&order=desc')).titles).toEqual(['A', 'B', 'C']);
+  });
+});

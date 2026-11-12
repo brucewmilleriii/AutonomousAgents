@@ -6,12 +6,17 @@ export interface TaskStore {
     status?: Task['status'] | undefined;
     owner?: string | undefined;
     q?: string | undefined;
+    sort?: SortField | undefined;
+    order?: SortOrder | undefined;
   }): Task[];
   get(id: string): Task | undefined;
   create(input: CreateTaskInput): Task;
   update(id: string, input: UpdateTaskInput): Task | undefined;
   remove(id: string): boolean;
 }
+
+export type SortField = 'createdAt' | 'updatedAt' | 'dueDate';
+export type SortOrder = 'asc' | 'desc';
 
 type Clock = () => Date;
 
@@ -22,7 +27,7 @@ export function createMemoryStore(clock: Clock = () => new Date()): TaskStore {
     list(filter) {
       const all = [...tasks.values()];
       const needle = filter?.q?.toLowerCase();
-      return all.filter(
+      const matching = all.filter(
         (t) =>
           (filter?.status === undefined || t.status === filter.status) &&
           (filter?.owner === undefined || t.owner === filter.owner) &&
@@ -30,6 +35,17 @@ export function createMemoryStore(clock: Clock = () => new Date()): TaskStore {
             t.title.toLowerCase().includes(needle) ||
             t.description.toLowerCase().includes(needle)),
       );
+      const sort = filter?.sort ?? 'createdAt';
+      const dir = filter?.order === 'desc' ? -1 : 1;
+      // Array.prototype.sort is stable, so ties keep insertion order in both directions.
+      return matching.sort((a, b) => {
+        const x = a[sort];
+        const y = b[sort];
+        if (x === y) return 0;
+        if (x === null) return 1; // missing dueDate always last
+        if (y === null) return -1;
+        return (x < y ? -1 : 1) * dir;
+      });
     },
 
     get(id) {
