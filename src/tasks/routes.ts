@@ -7,6 +7,7 @@ const IdParams = z.object({ id: z.string().uuid() });
 const ListQuery = z.object({
   status: TaskStatus.optional(),
   owner: z.string().trim().min(1).max(100).optional(),
+  q: z.string().trim().min(1).max(200).optional(),
   sort: z.enum(['createdAt', 'updatedAt', 'dueDate']).default('createdAt'),
   order: z.enum(['asc', 'desc']).default('asc'),
   limit: z

@@ -5,6 +5,7 @@ export interface TaskStore {
   list(filter?: {
     status?: Task['status'] | undefined;
     owner?: string | undefined;
+    q?: string | undefined;
     sort?: SortField | undefined;
     order?: SortOrder | undefined;
   }): Task[];
@@ -25,10 +26,14 @@ export function createMemoryStore(clock: Clock = () => new Date()): TaskStore {
   return {
     list(filter) {
       const all = [...tasks.values()];
+      const needle = filter?.q?.toLowerCase();
       const matching = all.filter(
         (t) =>
           (filter?.status === undefined || t.status === filter.status) &&
-          (filter?.owner === undefined || t.owner === filter.owner),
+          (filter?.owner === undefined || t.owner === filter.owner) &&
+          (needle === undefined ||
+            t.title.toLowerCase().includes(needle) ||
+            t.description.toLowerCase().includes(needle)),
       );
       const sort = filter?.sort ?? 'createdAt';
       const dir = filter?.order === 'desc' ? -1 : 1;

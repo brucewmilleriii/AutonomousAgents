@@ -30,6 +30,7 @@ pnpm dev         # http://127.0.0.1:3000/health
 | ------ | ---------- | ----------------------------------------------------------------------- |
 | GET    | /health    | `{status:"ok"}`                                                         |
 | GET    | /tasks     | List; filters `status`, `owner`; `sort`, `order`, `limit`, `offset`     |
+| GET    | /tasks?q=  | Case-insensitive plain-text search of title and description (max 200)   |
 | POST   | /tasks     | `{title, description?, owner?}` → 201                                   |
 | GET    | /tasks/:id | 404 if missing                                                          |
 | PATCH  | /tasks/:id | Any of title, description, owner (null clears), status; records history |
