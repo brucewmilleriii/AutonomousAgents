@@ -26,15 +26,15 @@ pnpm dev         # http://127.0.0.1:3000/health
 
 ## API
 
-| Method | Path           | Notes                                                                   |
-| ------ | -------------- | ----------------------------------------------------------------------- |
-| GET    | /health        | `{status:"ok"}`                                                         |
-| GET    | /tasks?status= | List, optional status filter                                            |
-| GET    | /tasks?q=      | Case-insensitive plain-text search of title and description (max 200)   |
-| POST   | /tasks         | `{title, description?, owner?}` → 201                                   |
-| GET    | /tasks/:id     | 404 if missing                                                          |
-| PATCH  | /tasks/:id     | Any of title, description, owner (null clears), status; records history |
-| DELETE | /tasks/:id     | 204, then 404                                                           |
+| Method | Path       | Notes                                                                                                                                                      |
+| ------ | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | /health    | `{status:"ok"}`                                                                                                                                            |
+| GET    | /tasks     | List, optional filters: `status`, `owner`, `dueBefore`, `dueAfter` (YYYY-MM-DD, strict, undated excluded), `overdue=true` (due before today UTC, not done) |
+| GET    | /tasks?q=  | Case-insensitive plain-text search of title and description (max 200)                                                                                      |
+| POST   | /tasks     | `{title, description?, owner?}` → 201                                                                                                                      |
+| GET    | /tasks/:id | 404 if missing                                                                                                                                             |
+| PATCH  | /tasks/:id | Any of title, description, owner (null clears), status; records history                                                                                    |
+| DELETE | /tasks/:id | 204, then 404                                                                                                                                              |
 
 Status values: `todo`, `in_progress`, `in_review`, `done`, `blocked`.
 

@@ -5,6 +5,9 @@ export interface TaskStore {
   list(filter?: {
     status?: Task['status'] | undefined;
     owner?: string | undefined;
+    dueBefore?: string | undefined;
+    dueAfter?: string | undefined;
+    overdue?: boolean | undefined;
     q?: string | undefined;
   }): Task[];
   get(id: string): Task | undefined;
@@ -21,11 +24,17 @@ export function createMemoryStore(clock: Clock = () => new Date()): TaskStore {
   return {
     list(filter) {
       const all = [...tasks.values()];
+      const today = filter?.overdue ? clock().toISOString().slice(0, 10) : undefined;
       const needle = filter?.q?.toLowerCase();
       return all.filter(
         (t) =>
           (filter?.status === undefined || t.status === filter.status) &&
           (filter?.owner === undefined || t.owner === filter.owner) &&
+          (filter?.dueBefore === undefined ||
+            (t.dueDate !== null && t.dueDate < filter.dueBefore)) &&
+          (filter?.dueAfter === undefined || (t.dueDate !== null && t.dueDate > filter.dueAfter)) &&
+          (today === undefined ||
+            (t.dueDate !== null && t.dueDate < today && t.status !== 'done')) &&
           (needle === undefined ||
             t.title.toLowerCase().includes(needle) ||
             t.description.toLowerCase().includes(needle)),

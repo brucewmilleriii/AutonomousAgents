@@ -532,3 +532,111 @@ describe('dueDate', () => {
     expect(nullAgain.json<Task>()).toEqual(undated);
   });
 });
+
+describe('GET /tasks due date filters', () => {
+  // The test clock is fixed on 2026-01-01 (UTC), so "today" is 2026-01-01.
+  async function seed() {
+    const early = (await createTask({ title: 'early', dueDate: '2025-12-31' })).task;
+    const today = (await createTask({ title: 'today', dueDate: '2026-01-01' })).task;
+    const late = (await createTask({ title: 'late', dueDate: '2026-02-01', owner: 'ann' })).task;
+    const none = (await createTask({ title: 'none' })).task;
+    return { early, today, late, none };
+  }
+  const titles = (res: { json: <T>() => T }) => res.json<Task[]>().map((t) => t.title);
+
+  it('dueBefore is strict and excludes undated tasks', async () => {
+    await seed();
+    const res = await app.inject({ method: 'GET', url: '/tasks?dueBefore=2026-01-01' });
+    expect(titles(res)).toEqual(['early']);
+    expect(res.headers['x-total-count']).toBe('1');
+  });
+
+  it('dueAfter is strict and excludes undated tasks', async () => {
+    await seed();
+    const res = await app.inject({ method: 'GET', url: '/tasks?dueAfter=2026-01-01' });
+    expect(titles(res)).toEqual(['late']);
+  });
+
+  it('overdue=true returns past-due, non-done tasks; due today is not overdue', async () => {
+    const { early } = await seed();
+    const overdueTitles = async () =>
+      titles(await app.inject({ method: 'GET', url: '/tasks?overdue=true' }));
+    expect(await overdueTitles()).toEqual(['early']);
+    await app.inject({ method: 'PATCH', url: `/tasks/${early.id}`, payload: { status: 'done' } });
+    expect(await overdueTitles()).toEqual([]);
+    // Only `done` clears overdue; other statuses stay overdue.
+    await app.inject({
+      method: 'PATCH',
+      url: `/tasks/${early.id}`,
+      payload: { status: 'blocked' },
+    });
+    expect(await overdueTitles()).toEqual(['early']);
+  });
+
+  it.each(['false', '1', 'TRUE', ''])('rejects overdue=%j', async (v) => {
+    const res = await app.inject({ method: 'GET', url: `/tasks?overdue=${v}` });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().issues.length).toBeGreaterThan(0);
+  });
+
+  it.each(['2026-02-30', 'tomorrow'])('rejects invalid date %j', async (v) => {
+    for (const p of ['dueBefore', 'dueAfter']) {
+      const res = await app.inject({ method: 'GET', url: `/tasks?${p}=${v}` });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('Bad Request');
+      expect(res.json().issues.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('combines filters with AND, status, owner and pagination', async () => {
+    await seed();
+    const range = await app.inject({
+      method: 'GET',
+      url: '/tasks?dueAfter=2025-12-31&dueBefore=2026-02-01',
+    });
+    expect(titles(range)).toEqual(['today']);
+
+    const owner = await app.inject({ method: 'GET', url: '/tasks?dueAfter=2025-12-01&owner=ann' });
+    expect(titles(owner)).toEqual(['late']);
+
+    const status = await app.inject({
+      method: 'GET',
+      url: '/tasks?dueAfter=2025-12-01&status=done',
+    });
+    expect(titles(status)).toEqual([]);
+
+    const page = await app.inject({
+      method: 'GET',
+      url: '/tasks?dueAfter=2025-12-01&limit=1&offset=1',
+    });
+    expect(titles(page)).toEqual(['today']);
+    expect(page.headers['x-total-count']).toBe('3');
+
+    const combo = await app.inject({
+      method: 'GET',
+      url: '/tasks?overdue=true&dueBefore=2025-12-31',
+    });
+    expect(titles(combo)).toEqual([]);
+  });
+});
+
+describe('overdue uses the UTC date of the injected clock', () => {
+  it('treats 23:59:59Z on 2026-01-01 as today', async () => {
+    const own = buildApp({
+      store: createMemoryStore(() => new Date('2026-01-01T23:59:59Z')),
+    });
+    await own.inject({
+      method: 'POST',
+      url: '/tasks',
+      payload: { title: 'today', dueDate: '2026-01-01' },
+    });
+    await own.inject({
+      method: 'POST',
+      url: '/tasks',
+      payload: { title: 'past', dueDate: '2025-12-31' },
+    });
+    const res = await own.inject({ method: 'GET', url: '/tasks?overdue=true' });
+    expect(res.json<Task[]>().map((t) => t.title)).toEqual(['past']);
+    await own.close();
+  });
+});
